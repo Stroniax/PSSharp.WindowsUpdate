@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{BB34AFE7-720D-4FDA-8531-B84B9C7FF98C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSSharp.WindowsUpdate.Commands", "src\PSSharp.WindowsUpdate.Commands\PSSharp.WindowsUpdate.Commands.csproj", "{EF9F1D10-2755-49A1-B526-4266F83CCED4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{BDA66CD3-F3B5-442D-A546-5411BAE1819C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSSharp.WindowsUpdate.Commands.Tests", "tests\PSSharp.WindowsUpdate.Commands.Tests\PSSharp.WindowsUpdate.Commands.Tests.csproj", "{43B45769-50FF-4125-8728-1A41BDEB9284}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EF9F1D10-2755-49A1-B526-4266F83CCED4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF9F1D10-2755-49A1-B526-4266F83CCED4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF9F1D10-2755-49A1-B526-4266F83CCED4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF9F1D10-2755-49A1-B526-4266F83CCED4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43B45769-50FF-4125-8728-1A41BDEB9284}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43B45769-50FF-4125-8728-1A41BDEB9284}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43B45769-50FF-4125-8728-1A41BDEB9284}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43B45769-50FF-4125-8728-1A41BDEB9284}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EF9F1D10-2755-49A1-B526-4266F83CCED4} = {BB34AFE7-720D-4FDA-8531-B84B9C7FF98C}
+		{43B45769-50FF-4125-8728-1A41BDEB9284} = {BDA66CD3-F3B5-442D-A546-5411BAE1819C}
+	EndGlobalSection
+EndGlobal

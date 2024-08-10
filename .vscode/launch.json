@@ -1,0 +1,61 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PowerShell Core Binary Debugger (Debug Configuration)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "pwsh.exe",
+            "args": [
+                "-noexit",
+                "-noprofile",
+                "-command",
+                ". '${workspaceFolder}/build/start-debugsession.ps1' -Path '${workspaceFolder}/src/PSSharp.WindowsUpdate.psm1'"
+            ],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Windows PowerShell Binary Debugger (Debug Configuration)",
+            "type": "clr",
+            "request": "launch",
+            "program": "powershell.exe",
+            "args": [
+                "-noexit",
+                "-noprofile",
+                "-command",
+                ". '${workspaceFolder}/build/start-debugsession.ps1' -Path '${workspaceFolder}/src/PSSharp.WindowsUpdate.psm1'"
+            ],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "PowerShell Core Script Debugger (Debug Configuration)",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": ". '${workspaceFolder}/build/start-debugsession.ps1' -Path '${workspaceFolder}/src/PSSharp.WindowsUpdate.psm1' -NoExit",
+            "internalConsoleOptions": "openOnSessionStart",
+            "createTemporaryIntegratedConsole": true,
+            "attachDotnetDebugger": true,
+        },
+        {
+            "name": "PowerShell Core Script Debugger (Release Configuration)",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": ". '${workspaceFolder}/build/start-debugsession.ps1'",
+            "preLaunchTask": "build manifest",
+            "internalConsoleOptions": "openOnSessionStart",
+            "createTemporaryIntegratedConsole": true,
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        },
+    ]
+}

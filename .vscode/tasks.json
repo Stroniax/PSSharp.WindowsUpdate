@@ -1,0 +1,177 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build manifest",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "args": [
+                "-noprofile",
+                "-File",
+                "${workspaceFolder}/build/build-manifest.ps1"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": [
+                "build binary",
+                "build docs",
+                "build formats",
+                "build types",
+                "build script module"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": "$msCompile",
+            "icon": {
+                "id": "report"
+            }
+        },
+        {
+            "label": "build binary module",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "publish",
+                "--configuration",
+                "Release",
+                "--framework",
+                "netstandard2.0",
+                "--output",
+                "${workspaceFolder}/artifacts/PSSharp.WindowsUpdate.Commands/0.1.0-dev/",
+                "/p:Version=0.1.0-dev",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary",
+                "${workspaceFolder}/src/PSSharp.WindowsUpdate.Commands"
+            ],
+            "group": "build",
+            "icon": {
+                "id": "file-binary"
+            }
+        },
+        {
+            "label": "build docs",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "args": [
+                "-noprofile",
+                "-File",
+                "${workspaceFolder}/build/build-docs.ps1"
+            ],
+            "group": "build",
+            "icon": {
+                "id": "question"
+            }
+        },
+        {
+            "label": "build formats",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "args": [
+                "-noprofile",
+                "-File",
+                "${workspaceFolder}/build/build-psformats.ps1"
+            ],
+            "icon": {
+                "id": "table"
+            }
+        },
+        {
+            "label": "build types",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "args": [
+                "-noprofile",
+                "-File",
+                "${workspaceFolder}/build/build-pstypes.ps1"
+            ],
+            "icon": {
+                "id": "symbol-class",
+                "color": "terminal.ansiWhite"
+            }
+        },
+        {
+            "label": "build script module",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "args": [
+                "-noprofile",
+                "-File",
+                "${workspaceFolder}/build/build-scriptmodule.ps1"
+            ],
+            "icon": {
+                "id": "terminal-powershell"
+            }
+        },
+        {
+            "label": "All Tests",
+            "dependsOn": [
+                "XUnit Tests",
+                "Pester Tests"
+            ],
+            "dependsOrder": "parallel",
+            "icon": {
+                "id": "beaker"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Pester Tests",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "args": [
+                "-noprofile",
+                "-command",
+                "Invoke-Pester"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": "$pester",
+            "icon": {
+                "id": "beaker"
+            }
+        },
+        {
+            "label": "XUnit Tests",
+            "type": "shell",
+            "command": "dotnet",
+            "args": [
+                "test"
+            ],
+            "problemMatcher": "$msCompile",
+            "icon": {
+                "id": "beaker"
+            }
+        },
+        {
+            "label": "update documentation",
+            "type": "shell",
+            "command": "pwsh.exe",
+            "dependsOn": "build",
+            "args": [
+                "-noprofile",
+                "-command",
+                "Import-Module '${workspaceFolder}/Build/PSSharp.WindowsUpdate', 'PlatyPS'; Update-MarkdownHelpModule '${workspaceFolder}/Documentation' -AlphabeticParamsOrder -RefreshModulePage -UpdateInputOutput"
+            ],
+            "group": "none"
+        },
+        {
+            "label": "clean",
+            "command": "pwsh",
+            "args": [
+                "-noprofile",
+                "-command",
+                "Remove-Item -Path '${workspaceFolder}/artifacts' -Recurse -Force"
+            ],
+            "problemMatcher": [],
+            "group": "none",
+            "icon": {
+                "id": "trashcan"
+            }
+        }
+    ]
+}
