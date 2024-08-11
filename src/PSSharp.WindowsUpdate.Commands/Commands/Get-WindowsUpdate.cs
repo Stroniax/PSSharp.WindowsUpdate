@@ -16,6 +16,7 @@ public sealed class GetWindowsUpdateCommand
     /// The title of the update to search for.
     /// </summary>
     [Parameter(Position = 0, ValueFromPipelineByPropertyName = true, ParameterSetName = "Default")]
+    [WindowsUpdateCompletion]
     [SupportsWildcards]
     [Alias("Name")]
     public string[]? Title { get; set; }

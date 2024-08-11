@@ -14,7 +14,8 @@ internal static class Injector
             .AddWindowsUpdateSession()
             .AddSingleton<DownloadPreferPipelineService>()
             .AddScoped<ISessionStateAccessor, PSCmdletSessionStateAccessor>()
-            .AddTransient<IAdministratorService, WindowsPrincipalAdministratorService>();
+            .AddTransient<IAdministratorService, WindowsPrincipalAdministratorService>()
+            .AddSingleton<WindowsUpdateCache>();
     }
 }
 
