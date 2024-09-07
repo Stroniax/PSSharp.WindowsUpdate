@@ -1,10 +1,10 @@
 ﻿using System.Management.Automation;
-using Microsoft.PowerShell.Cim;
 using WUApiLib;
 
 namespace PSSharp.WindowsUpdate.Commands;
 
 [Cmdlet(VerbsCommon.Get, "WindowsUpdateHistory")]
+[Alias("gwuh")]
 [OutputType(typeof(WindowsUpdateHistoryEntry))]
 public sealed class GetWindowsUpdateHistoryCommand
     : WindowsUpdateCmdlet<WindowsUpdateHistoryCmdletContext>,

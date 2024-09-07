@@ -20,7 +20,7 @@ public sealed record WindowsUpdateHistoryEntry : IWindowsUpdateComObjectWrapper
     public string Description => _entry.Description;
     public string SupportUrl => _entry.SupportUrl;
 
-    public DateTime Date => _entry.Date;
+    public DateTime Date => _entry.Date.ToLocalTime();
     public int HResult => _entry.HResult;
     public UpdateOperation Operation => _entry.Operation.Map();
     public OperationResultCode ResultCode => _entry.ResultCode.Map();

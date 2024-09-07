@@ -118,7 +118,9 @@ public sealed class GetWindowsUpdateCommand
         CancellationToken cancellationToken
     )
     {
-        WriteDebug($"Search for Windows Updates with Criteria: {criteria}");
+        WriteDebug(
+            $"Search for Windows Updates on service '{searcher.ServiceID}' with Criteria: {criteria}"
+        );
         if (AsJob)
         {
             ProcessJob(searcher, criteria);

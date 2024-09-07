@@ -85,7 +85,9 @@ public static class WindowsUpdateAsyncExtensions
         CancellationToken cancellationToken
     )
     {
-        var tcs = new TaskCompletionSource<bool>();
+        var tcs = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         var onCompleted = new SearchCompletedCallback(
             (job, args) => ((TaskCompletionSource<bool>)job.AsyncState).TrySetResult(false)
@@ -148,7 +150,9 @@ public static class WindowsUpdateAsyncExtensions
         CancellationToken cancellationToken
     )
     {
-        var tcs = new TaskCompletionSource<bool>();
+        var tcs = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         var progressChanged = new InstallationProgressChangedCallback(
             (job, args) => progress(job, args)
