@@ -102,7 +102,7 @@ internal static partial class WindowsUpdateMapping
     [return: NotNullIfNotNull(nameof(update))]
     public static WindowsUpdate? Map(this IUpdate? update) => update is null ? null : new(update);
 
-[return: NotNullIfNotNull(nameof(collection))]
+    [return: NotNullIfNotNull(nameof(collection))]
     public static IEnumerable<WindowsUpdate>? Map(this IUpdateCollection? collection) =>
         collection is null ? null : collection.Cast<IUpdate>().Select(Map).ToImmutableArray();
 

@@ -4,5 +4,6 @@ public sealed record WindowsUpdateCmdletContext(
     IUpdateSearcherFactory Searcher,
     IUpdateDownloaderFactory Downloader,
     IUpdateInstallerFactory Installer,
-    DownloadPreferPipelineService DownloadPreferPipeline
+    DownloadPreferPipelineService DownloadPreferPipeline,
+    WindowsUpdateCache Cache
 );

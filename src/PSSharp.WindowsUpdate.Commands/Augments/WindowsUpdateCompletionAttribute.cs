@@ -6,6 +6,11 @@ namespace PSSharp.WindowsUpdate.Commands;
 public sealed class WindowsUpdateCompletionAttribute
     : WindowsUpdateArgumentCompletionAttribute<WindowsUpdateCompletionContext>
 {
+#if NETSTANDARD2_0
+    public WindowsUpdateCompletionAttribute()
+        : base(typeof(WindowsUpdateCompletionAttribute)) { }
+#endif
+
     public override IEnumerable<CompletionResult> CompleteArgument(
         WindowsUpdateCompletionContext serviceContext,
         ArgumentCompletionContext completionContext,
@@ -19,7 +24,7 @@ public sealed class WindowsUpdateCompletionAttribute
         };
         return serviceContext
             .Cache.GetUpdates()
-            .Where(u => completionContext.IsMatch(u.Title))
+            .Where(u => completionContext.IsMatch(u.Title.AsSpan()))
             .Select(u => new CompletionResult(
                 completionTextSelector(u),
                 $"{u.Title} ({u.Identity.UpdateID})",

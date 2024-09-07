@@ -6,6 +6,11 @@ using System.Runtime.InteropServices;
 
 namespace PSSharp.WindowsUpdate.Commands;
 
+/// <remarks>
+///
+/// More error codes can be found at:
+/// <a href="https://learn.microsoft.com/en-us/windows/win32/wua_sdk/wua-success-and-error-codes-">WUA Success and Error Codes</a>
+/// </remarks>
 internal static class ErrorRecordFactory
 {
     /// <summary>
@@ -3439,7 +3444,10 @@ internal static class ErrorRecordFactory
                 );
             default:
                 return new ErrorRecord(
-                    innerException,
+                    innerException
+                        ?? new WindowsUpdateException(
+                            "An unexpected error occurred while processing the Windows Update operation."
+                        ),
                     "WindowsUpdateException",
                     ErrorCategory.NotSpecified,
                     targetObject

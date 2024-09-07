@@ -11,7 +11,9 @@ public static class WindowsUpdateAsyncExtensions
         CancellationToken cancellationToken
     )
     {
-        var tcs = new TaskCompletionSource<bool>();
+        var tcs = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         var progressChanged = new DownloadProgressChangedCallback(
             (job, args) => progress(job, args)
@@ -139,6 +141,42 @@ public static class WindowsUpdateAsyncExtensions
         var result = searcher.EndSearch(job);
         return result;
     }
+
+    public static async Task<IInstallationResult> InstallAsync(
+        this IUpdateInstaller installer,
+        Action<IInstallationJob, IInstallationProgressChangedCallbackArgs> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        var tcs = new TaskCompletionSource<bool>();
+
+        var progressChanged = new InstallationProgressChangedCallback(
+            (job, args) => progress(job, args)
+        );
+
+        var installCompleted = new InstallationCompletedCallback(
+            (job, args) => ((TaskCompletionSource<bool>)job.AsyncState).TrySetResult(false)
+        );
+
+        var job = installer.BeginInstall(progressChanged, installCompleted, tcs);
+
+        try
+        {
+            cancellationToken.Register(job.RequestAbort);
+
+            await tcs.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            job.CleanUp();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var result = installer.EndInstall(job);
+
+        return result;
+    }
 }
 
 file abstract class WindowsUpdateDelegate<TArg1, TArg2>(Action<TArg1, TArg2> action)
@@ -166,3 +204,15 @@ file sealed class DownloadCompletedCallback(
 file sealed class SearchCompletedCallback(Action<ISearchJob, ISearchCompletedCallbackArgs> action)
     : WindowsUpdateDelegate<ISearchJob, ISearchCompletedCallbackArgs>(action),
         ISearchCompletedCallback;
+
+file sealed class InstallationProgressChangedCallback(
+    Action<IInstallationJob, IInstallationProgressChangedCallbackArgs> action
+)
+    : WindowsUpdateDelegate<IInstallationJob, IInstallationProgressChangedCallbackArgs>(action),
+        IInstallationProgressChangedCallback;
+
+file sealed class InstallationCompletedCallback(
+    Action<IInstallationJob, IInstallationCompletedCallbackArgs> action
+)
+    : WindowsUpdateDelegate<IInstallationJob, IInstallationCompletedCallbackArgs>(action),
+        IInstallationCompletedCallback;

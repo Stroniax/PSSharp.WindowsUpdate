@@ -37,10 +37,7 @@ public sealed class GetWindowsUpdateServiceCommand
 
         foreach (var service in context.Manager.Services)
         {
-            if (
-                ParameterSetName == "ServiceId"
-                && !ServiceId.Contains(service.ServiceID)
-            )
+            if (ParameterSetName == "ServiceId" && !ServiceId.Contains(service.ServiceID))
             {
                 continue;
             }

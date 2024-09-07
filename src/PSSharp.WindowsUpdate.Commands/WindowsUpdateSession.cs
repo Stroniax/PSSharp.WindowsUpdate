@@ -19,4 +19,3 @@ public sealed class WindowsUpdateSession
     public string Name { get; }
     internal IUpdateSession Session { get; }
 }
-

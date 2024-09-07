@@ -9,6 +9,7 @@ public sealed class WindowsUpdateCache
 
     public void Set(WindowsUpdate update)
     {
+#if NET8_0_OR_GREATER
         _cache.AddOrUpdate(
             update.Identity.UpdateID,
             static (key, arg) => arg,
@@ -16,6 +17,9 @@ public sealed class WindowsUpdateCache
                 arg.Identity.RevisionNumber > existing.Identity.RevisionNumber ? arg : existing,
             update
         );
+#else
+        throw new NotImplementedException();
+#endif
     }
 
     public bool TryGetUpdate(Guid updateID, [MaybeNullWhen(false)] out WindowsUpdate update)

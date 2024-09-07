@@ -29,7 +29,9 @@ public sealed class WindowsUpdateServiceCompletionAttribute
             }
 
             var completionText =
-                completionContext.ParameterName == "Name" ? service.Name : service.ServiceID.ToString();
+                completionContext.ParameterName == "Name"
+                    ? service.Name
+                    : service.ServiceID.ToString();
 
             yield return new CompletionResult(
                 completionContext.Quotation.Apply(completionText),

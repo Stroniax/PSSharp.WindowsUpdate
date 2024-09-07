@@ -12,4 +12,3 @@ public sealed class UpdateInstallerFactory(WindowsUpdateSessionAccessor session)
         return _session.GetSession().CreateUpdateInstaller();
     }
 }
-
