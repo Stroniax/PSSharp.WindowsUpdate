@@ -9,6 +9,8 @@ public sealed class UpdateInstallerFactory(WindowsUpdateSessionAccessor session)
 
     public IUpdateInstaller CreateUpdateInstaller()
     {
-        return _session.GetSession().CreateUpdateInstaller();
+        var installer = _session.GetSession().CreateUpdateInstaller();
+        installer.ClientApplicationID = "PSSharp.WindowsUpdate";
+        return installer;
     }
 }

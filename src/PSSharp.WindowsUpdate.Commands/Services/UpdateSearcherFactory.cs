@@ -13,6 +13,7 @@ public sealed class UpdateSearcherFactory(
     public IUpdateSearcher CreateUpdateSearcher()
     {
         var searcher = _session.GetSession().CreateUpdateSearcher();
+        searcher.ClientApplicationID = "PSSharp.WindowsUpdate";
         var decorator = new UpdateSearcherWithCache((IUpdateSearcher3)searcher, _cache);
         return decorator;
     }

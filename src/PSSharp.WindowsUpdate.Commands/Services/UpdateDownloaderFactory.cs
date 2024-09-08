@@ -9,6 +9,8 @@ public sealed class UpdateDownloaderFactory(WindowsUpdateSessionAccessor session
 
     public IUpdateDownloader CreateUpdateDownloader()
     {
-        return _session.GetSession().CreateUpdateDownloader();
+        var downloader = _session.GetSession().CreateUpdateDownloader();
+        downloader.ClientApplicationID = "PSSharp.WindowsUpdate";
+        return downloader;
     }
 }
