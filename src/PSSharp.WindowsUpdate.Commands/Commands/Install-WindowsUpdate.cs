@@ -15,6 +15,8 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
     /// Starts at a reasonably high number to not conflict with other progress IDs.
     /// </remarks>
     private static int s_nextProgressId = 2_000;
+    private int _runningCount = 1;
+    private readonly BlockingCollection<object?> _asyncItems = [];
     private int _cmdletProgressId = Interlocked.Increment(ref s_nextProgressId);
 
     [Parameter(
@@ -52,6 +54,17 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
         }
 
         base.ProcessRecord(context, cancellationToken);
+    }
+
+    protected override void EndProcessing(
+        WindowsUpdateCmdletContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        base.EndProcessing(context, cancellationToken);
+
+        DecrementRunningCount();
+        DrainUntilCompleted(cancellationToken);
     }
 
     private void ProcessUpdate(
@@ -98,7 +111,145 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
         }
         else
         {
-            throw new NotImplementedException();
+            var installer = CreateInstaller(context, update);
+            Interlocked.Increment(ref _runningCount);
+            var job = installer.BeginInstall(
+                (job, args) =>
+                {
+                    var progress = CreateInstallationProgress(installer, args, updateProgressId);
+                    _asyncItems.Add(progress);
+                    if (args.Progress.CurrentUpdatePercentComplete == 100)
+                    {
+                        InstallationCompleted(args, installer);
+                    }
+                },
+                (job, args) =>
+                {
+                    try
+                    {
+                        var result = installer.EndInstall(job);
+                        if (result.ResultCode != WUApiLib.OperationResultCode.orcSucceeded)
+                        {
+                            var err = ErrorRecordFactory.ErrorRecordForHResult(
+                                result.HResult,
+                                update,
+                                null
+                            );
+                            _asyncItems.Add(err);
+                        }
+                    }
+                    finally
+                    {
+                        DecrementRunningCount();
+                    }
+                },
+                null
+            );
+
+            cancellationToken.Register(job.RequestAbort);
+        }
+    }
+
+    private void InstallationCompleted(
+        IInstallationProgressChangedCallbackArgs args,
+        IUpdateInstaller installer
+    )
+    {
+        var singleUpdateResult = args.Progress.GetUpdateResult(args.Progress.CurrentUpdateIndex);
+        var singleUpdate = installer.Updates[args.Progress.CurrentUpdateIndex].Map();
+        if (singleUpdateResult.ResultCode != WUApiLib.OperationResultCode.orcSucceeded)
+        {
+            var updateError = ErrorRecordFactory.ErrorRecordForHResult(
+                singleUpdateResult.HResult,
+                singleUpdate,
+                null
+            );
+            _asyncItems.Add(updateError);
+        }
+        else
+        {
+            _asyncItems.Add(singleUpdate);
+        }
+    }
+
+    private void Download(
+        WindowsUpdateCmdletContext context,
+        WindowsUpdate update,
+        CancellationToken cancellationToken
+    )
+    {
+        var updateProgressId = Interlocked.Increment(ref s_nextProgressId);
+
+        if (AsJob)
+        {
+            var job = AsyncDelegatedJob.Start(
+                "WindowsUpdateJob",
+                MyInvocation.Line,
+                update.Title,
+                async (jobContext, token) =>
+                {
+                    await DownloadAsChildJob(context, update, jobContext, updateProgressId);
+                    await InstallAsChildJob(context, update, jobContext, updateProgressId);
+                },
+                CancellationToken.None
+            );
+            WriteObject(job);
+            JobRepository.Add(job);
+        }
+        else
+        {
+            var downloader = CreateDownloader(context, update);
+            Interlocked.Increment(ref _runningCount);
+            var job = downloader.BeginDownload(
+                (job, args) =>
+                {
+                    var progress = CreateDownloadProgress(update, args, updateProgressId);
+                    _asyncItems.Add(progress);
+                },
+                (job, args) =>
+                {
+                    try
+                    {
+                        var result = downloader.EndDownload(job);
+                        for (int i = 0; i < downloader.Updates.Count; i++)
+                        {
+                            var singleDownloadResult = result.GetUpdateResult(i);
+                            if (
+                                singleDownloadResult.ResultCode
+                                != WUApiLib.OperationResultCode.orcSucceeded
+                            )
+                            {
+                                var failedUpdate = downloader.Updates[i].Map();
+                                var updateError = ErrorRecordFactory.ErrorRecordForHResult(
+                                    singleDownloadResult.HResult,
+                                    failedUpdate,
+                                    null
+                                );
+                                _asyncItems.Add(updateError);
+                            }
+                        }
+
+                        if (result.ResultCode != WUApiLib.OperationResultCode.orcSucceeded)
+                        {
+                            var err = ErrorRecordFactory.ErrorRecordForHResult(
+                                result.HResult,
+                                update,
+                                null
+                            );
+                            _asyncItems.Add(err);
+                        }
+
+                        Install(context, update, cancellationToken);
+                    }
+                    finally
+                    {
+                        DecrementRunningCount();
+                    }
+                },
+                null
+            );
+
+            cancellationToken.Register(job.RequestAbort);
         }
     }
 
@@ -110,7 +261,6 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
     {
         var singleUpdateResult = args.Progress.GetUpdateResult(args.Progress.CurrentUpdateIndex);
         var singleUpdate = installer.Updates[args.Progress.CurrentUpdateIndex].Map();
-        ;
         if (singleUpdateResult.ResultCode != WUApiLib.OperationResultCode.orcSucceeded)
         {
             var updateError = ErrorRecordFactory.ErrorRecordForHResult(
@@ -143,11 +293,12 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
     }
 
     private ProgressRecord CreateInstallationProgress(
-        WindowsUpdate update,
+        IUpdateInstaller installer,
         IInstallationProgressChangedCallbackArgs args,
         int updateProgressId
     )
     {
+        var update = installer.Updates[args.Progress.CurrentUpdateIndex];
         return new ProgressRecord(
             activityId: updateProgressId,
             activity: $"Installing {update.Title}",
@@ -158,36 +309,6 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
             PercentComplete = args.Progress.CurrentUpdatePercentComplete,
             RecordType = ProgressRecordType.Processing,
         };
-    }
-
-    private void Download(
-        WindowsUpdateCmdletContext context,
-        WindowsUpdate update,
-        CancellationToken cancellationToken
-    )
-    {
-        var updateProgressId = Interlocked.Increment(ref s_nextProgressId);
-
-        if (AsJob)
-        {
-            var job = AsyncDelegatedJob.Start(
-                "WindowsUpdateJob",
-                MyInvocation.Line,
-                update.Title,
-                async (jobContext, token) =>
-                {
-                    await DownloadAsChildJob(context, update, jobContext, updateProgressId);
-                    await InstallAsChildJob(context, update, jobContext, updateProgressId);
-                },
-                CancellationToken.None
-            );
-            WriteObject(job);
-            JobRepository.Add(job);
-        }
-        else
-        {
-            throw new NotImplementedException();
-        }
     }
 
     private async Task DownloadAsChildJob(
@@ -266,7 +387,11 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
                 var installResult = await installer.InstallAsync(
                     (job, args) =>
                     {
-                        var progress = CreateInstallationProgress(update, args, updateProgressId);
+                        var progress = CreateInstallationProgress(
+                            installer,
+                            args,
+                            updateProgressId
+                        );
                         jobContext.WriteProgress(progress);
 
                         if (args.Progress.CurrentUpdatePercentComplete == 100)
@@ -334,16 +459,98 @@ public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpd
         throw new NotImplementedException();
     }
 
-    protected override void EndProcessing(
-        WindowsUpdateCmdletContext context,
-        CancellationToken cancellationToken
-    )
+    private void DrainUntilCompleted(CancellationToken cancellationToken)
     {
-        base.EndProcessing(context, cancellationToken);
+        foreach (var obj in _asyncItems.GetConsumingEnumerable(cancellationToken))
+        {
+            if (obj is ErrorRecord err)
+            {
+                WriteError(err);
+            }
+            else if (obj is ProgressRecord prog)
+            {
+                WriteProgress(prog);
+            }
+            else
+            {
+                WriteObject(obj);
+            }
+        }
+    }
+
+    private void DrainPending()
+    {
+        while (_asyncItems.TryTake(out var obj))
+        {
+            if (obj is ErrorRecord err)
+            {
+                WriteError(err);
+            }
+            else if (obj is ProgressRecord prog)
+            {
+                WriteProgress(prog);
+            }
+            else
+            {
+                WriteObject(obj);
+            }
+        }
     }
 
     protected override void Dispose(bool disposing)
     {
+        _asyncItems.Dispose();
         base.Dispose(disposing);
+    }
+
+    private void DecrementRunningCount()
+    {
+        if (Interlocked.Decrement(ref _runningCount) == 0)
+        {
+            _asyncItems.CompleteAdding();
+        }
+    }
+}
+
+public interface IWriter
+{
+    void WriteObject(object obj);
+    void WriteError(ErrorRecord error);
+    void WriteProgress(ProgressRecord progress);
+}
+
+public sealed class JobWriter(AsyncDelegatedJobContext context) : IWriter
+{
+    public void WriteObject(object obj)
+    {
+        context.WriteObject(obj);
+    }
+
+    public void WriteError(ErrorRecord error)
+    {
+        context.WriteError(error);
+    }
+
+    public void WriteProgress(ProgressRecord progress)
+    {
+        context.WriteProgress(progress);
+    }
+}
+
+public sealed class CmdletWriter(BlockingCollection<object?> asyncItems) : IWriter
+{
+    public void WriteObject(object obj)
+    {
+        asyncItems.Add(obj);
+    }
+
+    public void WriteError(ErrorRecord error)
+    {
+        asyncItems.Add(error);
+    }
+
+    public void WriteProgress(ProgressRecord progress)
+    {
+        asyncItems.Add(progress);
     }
 }

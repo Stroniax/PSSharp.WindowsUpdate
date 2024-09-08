@@ -5,6 +5,23 @@ namespace PSSharp.WindowsUpdate.Commands;
 
 public static class WindowsUpdateAsyncExtensions
 {
+    public static IDownloadJob BeginDownload(
+        this IUpdateDownloader downloader,
+        Action<IDownloadJob, IDownloadProgressChangedCallbackArgs> progressChanged,
+        Action<IDownloadJob, IDownloadCompletedCallbackArgs> downloadCompleted,
+        object? state
+    )
+    {
+        var progressChangedCallback = new DownloadProgressChangedCallback(progressChanged);
+        var downloadCompletedCallback = new DownloadCompletedCallback(downloadCompleted);
+        var job = downloader.BeginDownload(
+            progressChangedCallback,
+            downloadCompletedCallback,
+            state
+        );
+        return job;
+    }
+
     public static async Task<IDownloadResult> DownloadAsync(
         this IUpdateDownloader downloader,
         Action<IDownloadJob, IDownloadProgressChangedCallbackArgs> progress,
@@ -15,15 +32,11 @@ public static class WindowsUpdateAsyncExtensions
             TaskCreationOptions.RunContinuationsAsynchronously
         );
 
-        var progressChanged = new DownloadProgressChangedCallback(
-            (job, args) => progress(job, args)
+        var job = downloader.BeginDownload(
+            progress,
+            (job, args) => ((TaskCompletionSource<bool>)job.AsyncState).TrySetResult(false),
+            tcs
         );
-
-        var downloadCompleted = new DownloadCompletedCallback(
-            (job, args) => ((TaskCompletionSource<bool>)job.AsyncState).TrySetResult(false)
-        );
-
-        var job = downloader.BeginDownload(progressChanged, downloadCompleted, tcs);
 
         try
         {
@@ -144,6 +157,19 @@ public static class WindowsUpdateAsyncExtensions
         return result;
     }
 
+    public static IInstallationJob BeginInstall(
+        this IUpdateInstaller installer,
+        Action<IInstallationJob, IInstallationProgressChangedCallbackArgs> progressChanged,
+        Action<IInstallationJob, IInstallationCompletedCallbackArgs> installCompleted,
+        object? state
+    )
+    {
+        var progressChangedCallback = new InstallationProgressChangedCallback(progressChanged);
+        var installCompletedCallback = new InstallationCompletedCallback(installCompleted);
+        var job = installer.BeginInstall(progressChangedCallback, installCompletedCallback, state);
+        return job;
+    }
+
     public static async Task<IInstallationResult> InstallAsync(
         this IUpdateInstaller installer,
         Action<IInstallationJob, IInstallationProgressChangedCallbackArgs> progress,
@@ -158,11 +184,11 @@ public static class WindowsUpdateAsyncExtensions
             (job, args) => progress(job, args)
         );
 
-        var installCompleted = new InstallationCompletedCallback(
-            (job, args) => ((TaskCompletionSource<bool>)job.AsyncState).TrySetResult(false)
+        var job = installer.BeginInstall(
+            progress,
+            (job, args) => ((TaskCompletionSource<bool>)job.AsyncState).TrySetResult(false),
+            tcs
         );
-
-        var job = installer.BeginInstall(progressChanged, installCompleted, tcs);
 
         try
         {
