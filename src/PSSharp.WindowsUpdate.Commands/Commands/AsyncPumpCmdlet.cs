@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Management.Automation;
 using System.Runtime.ExceptionServices;
+using WUApiLib;
 
 namespace PSSharp.WindowsUpdate.Commands;
 
@@ -54,7 +55,7 @@ public abstract class AsyncPumpCmdlet : PSCmdlet, IDisposable
                 _messageQueue.CompleteAdding();
             }
         });
-        foreach (var action in _messageQueue.GetConsumingEnumerable())
+        foreach (var action in _messageQueue.GetConsumingEnumerable(_cts.Token))
         {
             action();
         }
