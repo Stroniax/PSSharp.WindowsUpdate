@@ -162,7 +162,9 @@ public sealed partial class InstallWindowsUpdateCommand
         {
             installed(update);
         }
-        else
+        else if (
+            singleUpdateResult.ResultCode != WUApiLib.OperationResultCode.orcSucceededWithErrors
+        )
         {
             var updateError = ErrorRecordFactory.ErrorRecordForHResult(
                 singleUpdateResult.HResult,

@@ -177,7 +177,7 @@ public sealed partial class InstallWindowsUpdateCommand
         {
             downloaded(update);
         }
-        else
+        else if (result.ResultCode != WUApiLib.OperationResultCode.orcSucceededWithErrors)
         {
             var updateError = ErrorRecordFactory.ErrorRecordForHResult(
                 result.HResult,
@@ -230,6 +230,22 @@ public sealed partial class InstallWindowsUpdateCommand
 
     private void NotDownloadedError(WindowsUpdate update)
     {
-        throw new NotImplementedException();
+        var exn = new InvalidOperationException("The update has not been downloaded.");
+
+        var err = new ErrorRecord(
+            exn,
+            "UpdateNotDownloaded",
+            ErrorCategory.InvalidOperation,
+            update
+        )
+        {
+            ErrorDetails = new ErrorDetails($"The update '{update.Title}' has not been downloaded.")
+            {
+                RecommendedAction =
+                    "Download the update and re-try the installation. Consider omitting the -DoNotDownload switch to downloading and install directly."
+            }
+        };
+
+        WriteError(err);
     }
 }
