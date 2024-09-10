@@ -100,15 +100,6 @@ public sealed class GetWindowsUpdateSessionCommand
 
     private void WriteNotFoundError(string property, object value)
     {
-        WriteError(
-            new ErrorRecord(
-                new InvalidOperationException(
-                    $"No Windows Update session found with {property} '{value}'"
-                ),
-                "SessionNotFound",
-                ErrorCategory.ObjectNotFound,
-                value
-            )
-        );
+        WriteError(ErrorRecordFactory.NotFound("WindowsUpdateSession", property, value));
     }
 }

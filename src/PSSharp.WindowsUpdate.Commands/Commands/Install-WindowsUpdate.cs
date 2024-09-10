@@ -7,8 +7,7 @@ namespace PSSharp.WindowsUpdate.Commands;
 [Cmdlet(VerbsLifecycle.Install, "WindowsUpdate")]
 [OutputType(typeof(WindowsUpdate))]
 [Alias("iswu")]
-public sealed partial class InstallWindowsUpdateCommand
-    : WindowsUpdateCmdlet<WindowsUpdateCmdletContext>
+public sealed class InstallWindowsUpdateCommand : WindowsUpdateCmdlet<WindowsUpdateCmdletContext>
 {
     private const int MB = 1048576;
 
@@ -16,9 +15,10 @@ public sealed partial class InstallWindowsUpdateCommand
     /// Starts at a reasonably high number to not conflict with other progress IDs.
     /// </remarks>
     private static int s_nextProgressId = 2_000;
-    private int _runningCount = 1;
     private readonly BlockingCollection<object?> _asyncItems = [];
     private int _cmdletProgressId = Interlocked.Increment(ref s_nextProgressId);
+
+    private readonly List<IUpdate> _updatesToProcess = [];
 
     [Parameter(
         ParameterSetName = "Pipeline",
@@ -26,7 +26,7 @@ public sealed partial class InstallWindowsUpdateCommand
         Mandatory = true,
         ValueFromPipeline = true
     )]
-    [Alias("WindowsUpdate")]
+    [Alias("WindowsUpdate", "wu")]
     public WindowsUpdate[] Update { get; set; } = [];
 
     /// <summary>
@@ -49,14 +49,43 @@ public sealed partial class InstallWindowsUpdateCommand
         CancellationToken cancellationToken
     )
     {
-        foreach (var update in Update)
-        {
-            ProcessUpdate(context, update, cancellationToken);
-        }
-
         base.ProcessRecord(context, cancellationToken);
 
-        DrainPending();
+        foreach (var update in Update)
+        {
+            if (DoNotDownload && !update.IsDownloaded)
+            {
+                NotDownloadedError(update);
+                continue;
+            }
+
+            if (!ShouldProcess(update.Title, "Download & Install"))
+            {
+                continue;
+            }
+
+            _updatesToProcess.Add(update.Update);
+        }
+    }
+
+    private void NotDownloadedError(WindowsUpdate update)
+    {
+        var exn = new InvalidOperationException($"The update is not downloaded.");
+
+        var err = new ErrorRecord(
+            exn,
+            "UpdateNotDownloaded",
+            ErrorCategory.InvalidOperation,
+            update
+        )
+        {
+            ErrorDetails = new ErrorDetails($"The update '{update.Title}' is not downloaded.")
+            {
+                RecommendedAction = "Download the update before attempting to install it."
+            }
+        };
+
+        WriteError(err);
     }
 
     protected override void EndProcessing(
@@ -66,51 +95,328 @@ public sealed partial class InstallWindowsUpdateCommand
     {
         base.EndProcessing(context, cancellationToken);
 
-        DecrementRunningCount();
-        DrainUntilCompleted(cancellationToken);
+        var downloader = context.Downloader.CreateUpdateDownloader();
+        downloader.Updates = new UpdateCollection();
+        var installer = context.Installer.CreateUpdateInstaller();
+        foreach (var update in _updatesToProcess)
+        {
+            if (!update.IsDownloaded)
+            {
+                downloader.Updates.Add(update);
+            }
+            else
+            {
+                installer.Updates.Add(update);
+            }
+        }
+        if (AsJob)
+        {
+            var job = AsyncDelegatedJob.Start(
+                "WindowsUpdateJob",
+                MyInvocation.Line,
+                "Installing Windows Updates",
+                async (jobContext, token) =>
+                {
+                    if (downloader.Updates.Count > 0)
+                    {
+                        var downloadResult = await downloader.DownloadAsync(
+                            (job, args) =>
+                            {
+                                OnDownloadProgress(
+                                    job,
+                                    args,
+                                    _cmdletProgressId,
+                                    jobContext.WriteProgress,
+                                    jobContext.WriteError,
+                                    update => installer.Updates.Add(update)
+                                );
+                            },
+                            cancellationToken
+                        );
+
+                        OnJobCompleted(
+                            downloadResult.ResultCode,
+                            downloadResult.HResult,
+                            jobContext.WriteError
+                        );
+                        if (
+                            downloadResult.ResultCode
+                            is WUApiLib.OperationResultCode.orcFailed
+                                or WUApiLib.OperationResultCode.orcAborted
+                        )
+                        {
+                            return;
+                        }
+                    }
+
+                    if (installer.Updates.Count > 0)
+                    {
+                        var installResult = await installer.InstallAsync(
+                            (job, args) =>
+                            {
+                                OnInstallProgress(
+                                    job,
+                                    args,
+                                    _cmdletProgressId,
+                                    jobContext.WriteProgress,
+                                    jobContext.WriteError,
+                                    jobContext.WriteObject
+                                );
+                            },
+                            cancellationToken
+                        );
+
+                        OnJobCompleted(
+                            installResult.ResultCode,
+                            installResult.HResult,
+                            jobContext.WriteError
+                        );
+                    }
+                },
+                CancellationToken.None
+            );
+        }
+        else
+        {
+            IDownloadJob? downloadJob = null;
+            IInstallationJob? installJob = null;
+            if (downloader.Updates.Count > 0)
+            {
+                downloadJob = downloader.BeginDownload(
+                    // DOWNLOAD PROGRESS
+                    (job, args) =>
+                    {
+                        OnDownloadProgress(
+                            job,
+                            args,
+                            _cmdletProgressId,
+                            _asyncItems.Add,
+                            _asyncItems.Add,
+                            update => installer.Updates.Add(update)
+                        );
+                    },
+                    // DOWNLOAD COMPLETED
+                    (job, args) =>
+                    {
+                        var result = downloader.EndDownload(job);
+                        OnJobCompleted(result.ResultCode, result.HResult, _asyncItems.Add);
+                        if (
+                            result.ResultCode
+                                is WUApiLib.OperationResultCode.orcFailed
+                                    or WUApiLib.OperationResultCode.orcAborted
+                            || installer.Updates.Count == 0
+                        )
+                        {
+                            _asyncItems.CompleteAdding();
+                            return;
+                        }
+
+                        installJob = installer.BeginInstall(
+                            // INSTALL PROGRESS
+                            (job, args) =>
+                            {
+                                OnInstallProgress(
+                                    job,
+                                    args,
+                                    _cmdletProgressId,
+                                    _asyncItems.Add,
+                                    _asyncItems.Add,
+                                    _asyncItems.Add
+                                );
+                            },
+                            // INSTALL COMPLETED
+                            (job, args) =>
+                            {
+                                try
+                                {
+                                    var result = installer.EndInstall(job);
+                                    OnJobCompleted(
+                                        result.ResultCode,
+                                        result.HResult,
+                                        _asyncItems.Add
+                                    );
+                                }
+                                catch (Exception exn)
+                                {
+                                    _asyncItems.Add(
+                                        ErrorRecordFactory.CreateErrorRecord(
+                                            exn,
+                                            null,
+                                            "EndInstallJobError"
+                                        )
+                                    );
+                                }
+                                finally
+                                {
+                                    _asyncItems.CompleteAdding();
+                                }
+                            },
+                            null
+                        );
+
+                        cancellationToken.Register(() => installJob.RequestAbort());
+                    },
+                    null
+                );
+            }
+            else if (installer.Updates.Count > 0)
+            {
+                installJob = installer.BeginInstall(
+                    // INSTALL PROGRESS
+                    (job, args) =>
+                    {
+                        OnInstallProgress(
+                            job,
+                            args,
+                            _cmdletProgressId,
+                            _asyncItems.Add,
+                            _asyncItems.Add,
+                            _asyncItems.Add
+                        );
+                    },
+                    // INSTALL COMPLETED
+                    (job, args) =>
+                    {
+                        try
+                        {
+                            var result = installer.EndInstall(job);
+                            OnJobCompleted(result.ResultCode, result.HResult, _asyncItems.Add);
+                        }
+                        catch (Exception exn)
+                        {
+                            _asyncItems.Add(
+                                ErrorRecordFactory.CreateErrorRecord(
+                                    exn,
+                                    null,
+                                    "EndInstallJobError"
+                                )
+                            );
+                        }
+                        finally
+                        {
+                            _asyncItems.CompleteAdding();
+                        }
+                    },
+                    null
+                );
+            }
+
+            using var creg = cancellationToken.Register(() => downloadJob?.RequestAbort());
+            using var creg2 = cancellationToken.Register(() => installJob?.RequestAbort());
+
+            DrainUntilCompleted(cancellationToken);
+
+            downloadJob?.CleanUp();
+            installJob?.CleanUp();
+        }
     }
 
-    private void ProcessUpdate(
-        WindowsUpdateCmdletContext context,
-        WindowsUpdate update,
-        CancellationToken cancellationToken
+    private static void OnDownloadProgress(
+        IDownloadJob job,
+        IDownloadProgressChangedCallbackArgs args,
+        int cmdletProgressId,
+        Action<ProgressRecord> writeProgress,
+        Action<ErrorRecord> writeError,
+        Action<IUpdate> downloadCompleted
     )
     {
-        if (!update.IsDownloaded)
+        var update = job.Updates[args.Progress.CurrentUpdateIndex];
+
+        var totalProgress = new ProgressRecord(
+            cmdletProgressId,
+            "Installing Windows Updates",
+            "Downloading"
+        )
         {
-            if (DoNotDownload)
+            PercentComplete = args.Progress.PercentComplete / 2,
+        };
+
+        var updateProgress = new ProgressRecord(
+            cmdletProgressId + args.Progress.CurrentUpdateIndex,
+            $"Downloading {update.Title}",
+            args.Progress.CurrentUpdateDownloadPhase switch
             {
-                NotDownloadedError(update);
-                return;
+                DownloadPhase.dphInitializing => "Initializing",
+                DownloadPhase.dphDownloading
+                    => $"Downloading ({Math.Truncate(args.Progress.CurrentUpdateBytesDownloaded / MB)} MB / {Math.Truncate(args.Progress.CurrentUpdateBytesToDownload / MB)} MB)",
+                DownloadPhase.dphVerifying => "Verifying",
+                _ => "Unknown",
             }
-            Download(context, update, cancellationToken);
-            return;
+        )
+        {
+            ParentActivityId = cmdletProgressId,
+            PercentComplete = args.Progress.CurrentUpdatePercentComplete,
+        };
+
+        writeProgress(totalProgress);
+        writeProgress(updateProgress);
+
+        if (args.Progress.CurrentUpdatePercentComplete == 100)
+        {
+            var result = args.Progress.GetUpdateResult(args.Progress.CurrentUpdateIndex);
+            if (result.ResultCode == WUApiLib.OperationResultCode.orcFailed)
+            {
+                var err = ErrorRecordFactory.ErrorRecordForHResult(result.HResult, null, null);
+                writeError(err);
+            }
+            else if (result.ResultCode == WUApiLib.OperationResultCode.orcSucceeded)
+            {
+                downloadCompleted(update);
+            }
         }
-        Install(context, update, cancellationToken);
+    }
+
+    private static void OnInstallProgress(
+        IInstallationJob job,
+        IInstallationProgressChangedCallbackArgs args,
+        int cmdletProgressId,
+        Action<ProgressRecord> writeProgress,
+        Action<ErrorRecord> writeError,
+        Action<WindowsUpdate> writeObject
+    )
+    {
+        var update = job.Updates[args.Progress.CurrentUpdateIndex];
+
+        var totalProgress = new ProgressRecord(
+            cmdletProgressId,
+            "Installing Windows Updates",
+            "Installing"
+        )
+        {
+            PercentComplete = (100 + args.Progress.PercentComplete) / 2,
+        };
+
+        var updateProgress = new ProgressRecord(
+            cmdletProgressId + args.Progress.CurrentUpdateIndex,
+            $"Installing {update.Title}",
+            $"{args.Progress.CurrentUpdatePercentComplete}%"
+        )
+        {
+            ParentActivityId = cmdletProgressId,
+            PercentComplete = args.Progress.CurrentUpdatePercentComplete,
+        };
+
+        writeProgress(totalProgress);
+        writeProgress(updateProgress);
+
+        if (args.Progress.CurrentUpdatePercentComplete == 100)
+        {
+            var result = args.Progress.GetUpdateResult(args.Progress.CurrentUpdateIndex);
+            if (result.ResultCode == WUApiLib.OperationResultCode.orcFailed)
+            {
+                var err = ErrorRecordFactory.ErrorRecordForHResult(result.HResult, null, null);
+                writeError(err);
+            }
+            else if (result.ResultCode == WUApiLib.OperationResultCode.orcSucceeded)
+            {
+                writeObject(update.Map());
+            }
+        }
     }
 
     private void DrainUntilCompleted(CancellationToken cancellationToken)
     {
         foreach (var obj in _asyncItems.GetConsumingEnumerable(cancellationToken))
-        {
-            if (obj is ErrorRecord err)
-            {
-                WriteError(err);
-            }
-            else if (obj is ProgressRecord prog)
-            {
-                WriteProgress(prog);
-            }
-            else
-            {
-                WriteObject(obj);
-            }
-        }
-    }
-
-    private void DrainPending()
-    {
-        while (_asyncItems.TryTake(out var obj))
         {
             if (obj is ErrorRecord err)
             {
@@ -133,11 +439,16 @@ public sealed partial class InstallWindowsUpdateCommand
         base.Dispose(disposing);
     }
 
-    private void DecrementRunningCount()
+    private static void OnJobCompleted(
+        WUApiLib.OperationResultCode orc,
+        int hresult,
+        Action<ErrorRecord> writeError
+    )
     {
-        if (Interlocked.Decrement(ref _runningCount) == 0)
+        if (orc is WUApiLib.OperationResultCode.orcFailed)
         {
-            _asyncItems.CompleteAdding();
+            var err = ErrorRecordFactory.ErrorRecordForHResult(hresult, null, null);
+            writeError(err);
         }
     }
 }
