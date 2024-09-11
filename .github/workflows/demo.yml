@@ -24,6 +24,9 @@ jobs:
       matrix:
         dotnet-version:
           - "8.x"
+        tfm:
+          - net8.0
+          - netstandard2.0
     steps:
       - uses: actions/checkout@v4
       - name: Setup .NET ${{ matrix.dotnet-version }}
@@ -32,9 +35,9 @@ jobs:
           dotnet-version: ${{ matrix.dotnet-version }}
       - name: dotnet restore
         run: dotnet restore
-      - name: dotnet build
-        run: dotnet build --configuration Release
+      - name: dotnet build ./src/PSSharp.WindowsUpdate.Commands
+        run: dotnet build --configuration Release --framework ${{ matrix.tfm }}
       - name: dotnet test
-        run: dotnet test --no-restore --verbosity normal
+        run: dotnet test --no-restore --verbosity normal --framework ${{ matrix.tfm }}
       - name: dotnet publish
-        run: dotnet publish --configuration Release --output ./publish
+        run: dotnet publish ./src/PSSharp.WindowsUpdate.Commands --configuration Release --output ./publish --framework ${{ matrix.tfm }}
