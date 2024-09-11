@@ -35,8 +35,8 @@ jobs:
           dotnet-version: ${{ matrix.dotnet-version }}
       - name: dotnet restore
         run: dotnet restore
-      - name: dotnet build ./src/PSSharp.WindowsUpdate.Commands
-        run: dotnet build --configuration Release --framework ${{ matrix.tfm }}
+      - name: dotnet build
+        run: dotnet build  ./src/PSSharp.WindowsUpdate.Commands --configuration Release --framework ${{ matrix.tfm }}
       - name: dotnet test
         run: dotnet test --no-restore --verbosity normal
       - name: dotnet publish
