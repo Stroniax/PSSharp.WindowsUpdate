@@ -4,7 +4,7 @@ on:
   - push
 jobs:
   display-version:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     strategy:
       matrix:
         dotnet-version:
@@ -38,6 +38,6 @@ jobs:
       - name: dotnet build ./src/PSSharp.WindowsUpdate.Commands
         run: dotnet build --configuration Release --framework ${{ matrix.tfm }}
       - name: dotnet test
-        run: dotnet test --no-restore --verbosity normal --framework ${{ matrix.tfm }}
+        run: dotnet test --no-restore --verbosity normal
       - name: dotnet publish
         run: dotnet publish ./src/PSSharp.WindowsUpdate.Commands --configuration Release --output ./publish --framework ${{ matrix.tfm }}
